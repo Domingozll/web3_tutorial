@@ -31,13 +31,14 @@ contract FundMe {
     bool public getFundSuccess = false;
 
     //如过要将MINIMUM_VALUE设置为以USD为单位的货币值，则需要引入预言机，获取实时汇率
-    AggregatorV3Interface internal dataFeed;
+    AggregatorV3Interface public dataFeed;
 
     //只会在合约部署时被调用一次
-    constructor(uint256 _lockTime) {
+    constructor(uint256 _lockTime, address dataFeedAddr) {
         dataFeed = AggregatorV3Interface(
             //ETH对USD的data feed地址
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
+            // 0x694AA1769357215DE4FAC081bf1f309aDC325306
+            dataFeedAddr
         );
 
         owner = msg.sender;

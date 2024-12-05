@@ -10,6 +10,7 @@ require("@nomicfoundation/hardhat-verify")
 // require("./tasks/interact-fundme")
 // 自动加载 index.js
 require("./tasks")
+require("hardhat-deploy")
 
 const SEPOLIA_URL = process.env.SEPOLIA_URL
 const PRIVATE_KEY = process.env.PRIVATE_KEY
@@ -23,8 +24,9 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: "0.8.27",
-  // 指定部署网络
-  // defaultNetwork:"hardhat",
+  //默认部署网络
+  defaultNetwork: "hardhat",
+   // 指定部署网络
   networks:{
     sepolia: {
       // 从Alchemy,Infura,QuickNode等服务商网站上获取url
@@ -38,8 +40,13 @@ module.exports = {
     apiKey: {
       sepolia: ETHERSCAN_API_KEY
     }
-    
+  },
+  namedAccounts:{
+    firstAccount: {
+      default: 0
+    },
+    seconeAccount: {
+      default: 1
+    }
   }
-
-  
 };
