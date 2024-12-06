@@ -1,0 +1,54 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorInterface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorInterface {\n  function latestAnswer() external view returns (int256);\n\n  function latestTimestamp() external view returns (uint256);\n\n  function latestRound() external view returns (uint256);\n\n  function getAnswer(uint256 roundId) external view returns (int256);\n\n  function getTimestamp(uint256 roundId) external view returns (uint256);\n\n  event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);\n\n  event NewRound(uint256 indexed roundId, address indexed startedBy, uint256 startedAt);\n}\n"
+    },
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV2V3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport {AggregatorInterface} from \"./AggregatorInterface.sol\";\nimport {AggregatorV3Interface} from \"./AggregatorV3Interface.sol\";\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorV2V3Interface is AggregatorInterface, AggregatorV3Interface {}\n"
+    },
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  function getRoundData(\n    uint80 _roundId\n  ) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n\n  function latestRoundData()\n    external\n    view\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n}\n"
+    },
+    "@chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"../shared/interfaces/AggregatorV2V3Interface.sol\";\n\n/**\n * @title MockV3Aggregator\n * @notice Based on the FluxAggregator contract\n * @notice Use this contract when you need to test\n * other contract's ability to read data from an\n * aggregator contract, but how the aggregator got\n * its answer is unimportant\n */\ncontract MockV3Aggregator is AggregatorV2V3Interface {\n  uint256 public constant override version = 0;\n\n  uint8 public override decimals;\n  int256 public override latestAnswer;\n  uint256 public override latestTimestamp;\n  uint256 public override latestRound;\n\n  mapping(uint256 => int256) public override getAnswer;\n  mapping(uint256 => uint256) public override getTimestamp;\n  mapping(uint256 => uint256) private getStartedAt;\n\n  constructor(uint8 _decimals, int256 _initialAnswer) {\n    decimals = _decimals;\n    updateAnswer(_initialAnswer);\n  }\n\n  function updateAnswer(int256 _answer) public {\n    latestAnswer = _answer;\n    latestTimestamp = block.timestamp;\n    latestRound++;\n    getAnswer[latestRound] = _answer;\n    getTimestamp[latestRound] = block.timestamp;\n    getStartedAt[latestRound] = block.timestamp;\n  }\n\n  function updateRoundData(uint80 _roundId, int256 _answer, uint256 _timestamp, uint256 _startedAt) public {\n    latestRound = _roundId;\n    latestAnswer = _answer;\n    latestTimestamp = _timestamp;\n    getAnswer[latestRound] = _answer;\n    getTimestamp[latestRound] = _timestamp;\n    getStartedAt[latestRound] = _startedAt;\n  }\n\n  function getRoundData(\n    uint80 _roundId\n  )\n    external\n    view\n    override\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)\n  {\n    return (_roundId, getAnswer[_roundId], getStartedAt[_roundId], getTimestamp[_roundId], _roundId);\n  }\n\n  function latestRoundData()\n    external\n    view\n    override\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)\n  {\n    return (\n      uint80(latestRound),\n      getAnswer[latestRound],\n      getStartedAt[latestRound],\n      getTimestamp[latestRound],\n      uint80(latestRound)\n    );\n  }\n\n  function description() external pure override returns (string memory) {\n    return \"v0.8/tests/MockV3Aggregator.sol\";\n  }\n}\n"
+    },
+    "contracts/FundMe.sol": {
+      "content": "//SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\nimport {AggregatorV3Interface} from \"@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol\";\n\n\n// 1、创建一个收款函数\n// 2、记录投资人并且查看\n// 3、在锁定期内，达到目标值，生产商可以提款\n// 4、在锁定期内，没有达到目标值，投资人在锁定期以后退款\ncontract FundMe {\n\n    mapping(address => uint256) public fundersToAmount;\n\n    // uint256 MINIMUM_VALUE = 1 * 10 ** 18; // 1 ETH\n\n    uint256 constant MINIMUM_VALUE = 1; // 1 USD\n\n    uint256 constant TARGET = 100;\n\n    //合约部署时间\n    uint256 deploymentTimestamp;\n\n    //锁定时间\n    uint256 lockTime;\n\n    address public owner;\n\n    address public erc20Addr;\n\n    bool public getFundSuccess = false;\n\n    //如过要将MINIMUM_VALUE设置为以USD为单位的货币值，则需要引入预言机，获取实时汇率\n    AggregatorV3Interface public dataFeed;\n\n    //只会在合约部署时被调用一次\n    constructor(uint256 _lockTime, address dataFeedAddr) {\n        dataFeed = AggregatorV3Interface(\n            //ETH对USD的data feed地址\n            // 0x694AA1769357215DE4FAC081bf1f309aDC325306\n            dataFeedAddr\n        );\n\n        owner = msg.sender;\n        deploymentTimestamp = block.timestamp;\n        lockTime = _lockTime;\n    }\n\n    /**\n     * Returns the latest answer.\n     */\n    function getChainlinkDataFeedLatestAnswer() public view returns (int) {\n        // prettier-ignore\n        (\n            /* uint80 roundID */,\n            int answer,\n            /*uint startedAt*/,\n            /*uint timeStamp*/,\n            /*uint80 answeredInRound*/\n        ) = dataFeed.latestRoundData();\n        return answer;\n    }\n\n    // ethAmount由msg.value传入，msg.value的单位是ETH\n    function convertEthToUsd(uint256 ethAmount) internal view returns(uint256) {\n        // ethPrice: 1个ETH值多少USD\n        uint256 ethPrice = uint256(getChainlinkDataFeedLatestAnswer());\n        \n        // ethPrice位为1ETH的美元价格(chainlink预言机准精度为8位小数，即返回值单位是 1e8,需要除以1e8才能得到实际的USD价格),\n        // ethAmount的单位为 wei，需要除以 10 ** 18转换位ETH\n        return ethAmount / (10 ** 18) * ethPrice / (10 ** 8);\n    }\n\n    function getFund() external onlyOwner targetNotReached {\n        //this 指代当前合约\n        //transfer: transfer ETH and revert if tx failed\n        // payable(msg.sender).transfer(address(this).balance);\n        //send: transfer ETH.return false if failed.return true if success\n        // bool success = payable(msg.sender).send(address(this).balance);\n        // require(success,\"tx failed.\");\n        //call: transfer ETH with data.return value of function and bool.(以太坊推荐写法)\n        bool success;\n        (success,) = payable(msg.sender).call{value:address(this).balance}(\"\");\n        require(success,\"tx failed.\");\n        getFundSuccess = true;\n    }\n\n    function fund() external payable fundWindClosed {\n        require( convertEthToUsd(msg.value) >= MINIMUM_VALUE,\"Send more ETH\");\n        fundersToAmount[msg.sender] = msg.value;\n    }\n\n    function refund() external fundWindNotClosed targetReached {\n        require(fundersToAmount[msg.sender] != 0,\"there is no fund for you\");\n\n        //将退款人余额清0\n        fundersToAmount[msg.sender] = 0; \n        bool success;\n        (success,) = payable(msg.sender).call{value:fundersToAmount[msg.sender]}(\"\");\n        require(success,\"transfer tx failed.\");\n    }\n\n    function transferOwner(address newOwner) public onlyOwner {\n        owner = newOwner;\n    }\n\n    function setFunderToAmount(address funder,uint256 amountToUpdate) external {\n        require(msg.sender == erc20Addr,\"you do not have permission to call this function\");\n        fundersToAmount[funder] = amountToUpdate;\n    }\n\n    function setErc20Addr(address _erc20Addr) public onlyOwner {\n        erc20Addr = _erc20Addr;\n    }\n\n    modifier fundWindClosed() {\n        require(block.timestamp < deploymentTimestamp + lockTime,\"fund window is closed.\");\n        _;\n    }\n\n     modifier fundWindNotClosed() {\n        require(block.timestamp >= deploymentTimestamp + lockTime,\"fund window is not close yet.\");\n        _; //放在下面会减少运算，节约gas fee\n    }\n\n    modifier onlyOwner() {\n        require(msg.sender == owner,\"this function can only be called by owner.\");\n        _;\n    }\n\n    modifier targetNotReached() {\n        require(convertEthToUsd(address(this).balance) >= TARGET,\"Target is not reached yet.\");\n        _;\n    }\n\n     modifier targetReached() {\n        require(convertEthToUsd(address(this).balance) < TARGET,\"Target is reached.\");\n        _;\n    }\n    \n}"
+    },
+    "contracts/Lock.sol": {
+      "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.27;\n\n// Uncomment this line to use console.log\n// import \"hardhat/console.sol\";\n\ncontract Lock {\n    uint public unlockTime;\n    address payable public owner;\n\n    event Withdrawal(uint amount, uint when);\n\n    constructor(uint _unlockTime) payable {\n        require(\n            block.timestamp < _unlockTime,\n            \"Unlock time should be in the future\"\n        );\n\n        unlockTime = _unlockTime;\n        owner = payable(msg.sender);\n    }\n\n    function withdraw() public {\n        // Uncomment this line, and the import of \"hardhat/console.sol\", to print a log in your terminal\n        // console.log(\"Unlock time is %o and block timestamp is %o\", unlockTime, block.timestamp);\n\n        require(block.timestamp >= unlockTime, \"You can't withdraw yet\");\n        require(msg.sender == owner, \"You aren't the owner\");\n\n        emit Withdrawal(address(this).balance, block.timestamp);\n\n        owner.transfer(address(this).balance);\n    }\n}\n"
+    },
+    "contracts/mocks/MockV3Aggregator.sol": {
+      "content": "//SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\nimport \"@chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol\";"
+    }
+  },
+  "settings": {
+    "evmVersion": "paris",
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}

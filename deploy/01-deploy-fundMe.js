@@ -7,12 +7,12 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     console.log(`first account is ${firstAccount}`)
     console.log("this is a deploy function")
 
-    let dataFeeedAddr
+    let dataFeedAddr
     let confirmations
     /* if local network */
     if (devlopmentChains.includes(network.name)) {
         const mockV3Aggregator = await deployments.get("MockV3Aggregator")
-        dataFeeedAddr = mockV3Aggregator.address
+        dataFeedAddr = mockV3Aggregator.address
         confirmations = 0
     } else {
         dataFeedAddr = networkConfig[network.config.chainId].ethUsdDataFeed

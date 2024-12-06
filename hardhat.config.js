@@ -11,6 +11,9 @@ require("@nomicfoundation/hardhat-verify")
 // 自动加载 index.js
 require("./tasks")
 require("hardhat-deploy")
+require("@nomicfoundation/hardhat-ethers");
+require("hardhat-deploy");
+require("hardhat-deploy-ethers");
 
 const SEPOLIA_URL = process.env.SEPOLIA_URL
 const PRIVATE_KEY = process.env.PRIVATE_KEY
@@ -45,8 +48,14 @@ module.exports = {
     firstAccount: {
       default: 0
     },
-    seconeAccount: {
+    secondAccount: {
       default: 1
     }
+  },
+  mocha: {
+    timeout: 300000
+  },
+  gasReporter: {
+    enabled: true
   }
 };
